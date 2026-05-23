@@ -421,5 +421,6 @@ declare module bagsAst {
 		| 'in'
 		| 'notIn'
 		| 'list'
+		| 'statementSubquery'
 	);
 }

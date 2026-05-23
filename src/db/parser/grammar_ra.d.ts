@@ -421,5 +421,6 @@ declare module relalgAst {
 		| 'in'
 		| 'notIn'
 		| 'list'
+		| 'statementSubquery'
 	);
 }

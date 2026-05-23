@@ -375,6 +375,14 @@ export class ValueExprGeneric extends ValueExpr {
 					list.push(this._args[i].evaluate(tupleA, tupleB, row, statementSession));
 				}
 				return list;
+			case 'statementSubquery':
+				const table = this._args[0].getResult(true, statementSession);
+				const rows = table.getRows();
+				const values = [];
+				for (let i = 0; i < rows.length; i++) {
+					values.push(rows[i][0]);
+				}
+				return values;
 			default:
 				throw new Error('this should not happen!');
 		}
@@ -701,8 +709,8 @@ export class ValueExprGeneric extends ValueExpr {
 				let regex_txt = txt;
 				this._regex = new RegExp(regex_txt);
 				break;
-			case 'in':
-			case 'notIn':
+		case 'in':
+		case 'notIn':
 				this._args[0].check(schemaA, schemaB);
 				this._args[1].check(schemaA, schemaB);
 				typeA = this._args[0].getDataType();
@@ -713,6 +721,18 @@ export class ValueExprGeneric extends ValueExpr {
 				if (listArg._func === 'list') {
 					for (let i = 0; i < listArg._args.length; i++) {
 						const itemType = listArg._args[i].getDataType();
+						if (itemType !== 'null' && itemType !== typeA) {
+							this.throwExecutionError(i18n.t('db.messages.exec.error-could-not-compare-different-types', {
+								typeA: typeA,
+								typeB: itemType,
+							}));
+						}
+					}
+				}
+				else if (listArg._func === 'statementSubquery') {
+					const subquerySchema = listArg._args[0].getSchema();
+					if (subquerySchema.getSize() > 0) {
+						const itemType = subquerySchema.getType(0);
 						if (itemType !== 'null' && itemType !== typeA) {
 							this.throwExecutionError(i18n.t('db.messages.exec.error-could-not-compare-different-types', {
 								typeA: typeA,
@@ -1080,6 +1100,9 @@ export class ValueExprGeneric extends ValueExpr {
 					this._args[i].check(schemaA, schemaB);
 				}
 				break;
+			case 'statementSubquery':
+				// subquery was already checked during translation
+				break;
 			default:
 				throw new Error('this should not happen!');
 		}
@@ -1217,6 +1240,9 @@ export class ValueExprGeneric extends ValueExpr {
 	}
 
 	toString() {
+		if (this._func === 'statementSubquery') {
+			return '(subquery)';
+		}
 		let str = this._func + '(';
 		for (let i = 0; i < this._args.length; i++) {
 			if (i !== 0) {
@@ -1367,21 +1393,29 @@ export class ValueExprGeneric extends ValueExpr {
 						return `<span>¬ (${betweenExpr})</span>`;
 					}
 				}
-				case 'in':
-				case 'notIn': {
-					const left = this._args[0].getFormulaHtml();
-					const listArg = this._args[1];
-					const parts: string[] = [];
-					for (let i = 0; i < listArg._args.length; i++) {
-						parts.push(`${left} = ${listArg._args[i].getFormulaHtml()}`);
-					}
-					const inExpr = parts.join(' ∨ ');
+			case 'in':
+			case 'notIn': {
+				const left = this._args[0].getFormulaHtml();
+				const listArg = this._args[1];
+				if (listArg._func === 'statementSubquery') {
+					const inExpr = `${left} ∈ (subquery)`;
 					if (_func === 'in') {
 						return `<span>${inExpr}</span>`;
 					} else {
 						return `<span>¬ (${inExpr})</span>`;
 					}
 				}
+				const parts: string[] = [];
+				for (let i = 0; i < listArg._args.length; i++) {
+					parts.push(`${left} = ${listArg._args[i].getFormulaHtml()}`);
+				}
+				const inExpr = parts.join(' ∨ ');
+				if (_func === 'in') {
+					return `<span>${inExpr}</span>`;
+				} else {
+					return `<span>¬ (${inExpr})</span>`;
+				}
+			}
 			}
 
 			return this.toString();

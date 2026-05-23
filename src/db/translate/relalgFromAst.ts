@@ -714,8 +714,23 @@ export function relalgFromSQLAstRoot(astRoot: sqlAst.rootSql | any, relations: {
 		return node;
 	}
 
+	function precompileSubqueries(n: any) {
+		if (n.type === 'valueExpr' && n.func === 'statementSubquery') {
+			n.args[0] = rec(n.args[0]);
+			n.args[0].check();
+		}
+		if (n.args) {
+			for (let i = 0; i < n.args.length; i++) {
+				if (typeof n.args[i] === 'object' && n.args[i] !== null) {
+					precompileSubqueries(n.args[i]);
+				}
+			}
+		}
+	}
+
 	function getSelection(root: RANode, condition: sqlAst.booleanExpr, codeInfo: CodeInfo) {
 		root.check();
+		precompileSubqueries(condition);
 		const node = new Selection(root, recValueExpr(condition));
 		node.setCodeInfoObject(codeInfo);
 		return node;
@@ -788,6 +803,7 @@ export function relalgFromSQLAstRoot(astRoot: sqlAst.rootSql | any, relations: {
 					projections.push(new Column(col.name, null)); // has been renamed by gamma
 				}
 				else if (col.type === 'namedColumnExpr') {
+					precompileSubqueries(col.child);
 					projections.push({
 						name: col.name,
 						relAlias: col.relAlias,
@@ -833,6 +849,9 @@ function recValueExpr(n: relalgAst.valueExpr | sqlAst.valueExpr): ValueExpr.Valu
 	let node: ValueExpr.ValueExpr;
 	if (n.datatype === 'null' && n.func === 'columnValue') {
 		node = new ValueExpr.ValueExprColumnValue(n.args[0], n.args[1]);
+	}
+	else if (n.datatype === 'null' && n.func === 'statementSubquery') {
+		node = new ValueExpr.ValueExprGeneric('null', 'statementSubquery', [n.args[0]]);
 	}
 	else {
 		switch (n.datatype) {

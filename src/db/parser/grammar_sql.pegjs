@@ -1277,32 +1277,49 @@ expr_rest_boolean_comparison
 	}
 
 expr_rest_in
-= __ neg:('not'i __)? 'in'i _ '(' _
-    first:expr_precedence4 rest:(_ ',' _ expr_precedence4)*
-  _ ')'
-	{
-		var listObj = {
-			type: 'valueExpr',
-			datatype: 'null',
-			func: 'list',
-			args: [first],
+= __ neg:('not'i __)? 'in'i _ '(' _ inner:(
+        sub:statement _ ')'
+        {
+            return {
+                type: 'valueExpr',
+                datatype: 'boolean',
+                func: (neg !== null) ? 'notIn' : 'in',
+                args: [undefined, {
+                    type: 'valueExpr',
+                    datatype: 'null',
+                    func: 'statementSubquery',
+                    args: [sub],
+                    codeInfo: getCodeInfo()
+                }],
+                codeInfo: getCodeInfo()
+            };
+        }
+    /
+        first:expr_precedence4 rest:(_ ',' _ expr_precedence4)* _ ')'
+        {
+            var listObj = {
+                type: 'valueExpr',
+                datatype: 'null',
+                func: 'list',
+                args: [first],
 
-			codeInfo: getCodeInfo()
-		};
+                codeInfo: getCodeInfo()
+            };
 
-		for(var i = 0; i < rest.length; i++){
-			listObj.args.push(rest[i][3]);
-		}
+            for(var i = 0; i < rest.length; i++){
+                listObj.args.push(rest[i][3]);
+            }
 
-		return {
-			type: 'valueExpr',
-			datatype: 'boolean',
-			func: (neg !== null) ? 'notIn' : 'in',
-			args: [undefined, listObj],
+            return {
+                type: 'valueExpr',
+                datatype: 'boolean',
+                func: (neg !== null) ? 'notIn' : 'in',
+                args: [undefined, listObj],
 
-			codeInfo: getCodeInfo()
-		};
-	}
+                codeInfo: getCodeInfo()
+            };
+        }
+    ) { return inner; }
 
 expr_rest_number_add
 = _ o:('-' / '+') _ right:expr_precedence3

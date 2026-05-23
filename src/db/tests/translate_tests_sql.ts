@@ -1584,3 +1584,53 @@ QUnit.test('test selection using NOT BETWEEN with date constant (true case)', fu
 
 	assert.deepEqual(root.getResult(), ref.getResult());
 });
+
+QUnit.test('test selection IN with subquery', function (assert) {
+	const root = exec_sql("select distinct * from R where c in (select b from S)");
+
+	const ref = relalgjs.executeRelalg(`{
+		R.a, R.b, R.c
+		1,   'a', 'd'
+		3,   'c', 'c'
+		5,   'd', 'b'
+	}`);
+
+	assert.deepEqual(root.getResult(), ref.getResult());
+});
+
+QUnit.test('test selection NOT IN with subquery', function (assert) {
+	const root = exec_sql("select distinct * from R where c not in (select b from S)");
+
+	const ref = relalgjs.executeRelalg(`{
+		R.a, R.b, R.c
+		4,   'd', 'f'
+		6,   'e', 'f'
+	}`);
+
+	assert.deepEqual(root.getResult(), ref.getResult());
+});
+
+QUnit.test('test selection IN with subquery - no matches', function (assert) {
+	const root = exec_sql("select distinct * from R where a in (select d from S)");
+
+	const ref = relalgjs.executeRelalg(`{
+		R.a, R.b, R.c
+	}`);
+
+	assert.deepEqual(root.getResult(), ref.getResult());
+});
+
+QUnit.test('test selection NOT IN with subquery - all match', function (assert) {
+	const root = exec_sql("select distinct * from R where a not in (select d from S)");
+
+	const ref = relalgjs.executeRelalg(`{
+		R.a, R.b, R.c
+		1,   'a', 'd'
+		3,   'c', 'c'
+		4,   'd', 'f'
+		5,   'd', 'b'
+		6,   'e', 'f'
+	}`);
+
+	assert.deepEqual(root.getResult(), ref.getResult());
+});
