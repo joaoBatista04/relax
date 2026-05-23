@@ -418,5 +418,8 @@ declare module relalgAst {
 		| "cast"
 		| 'between'
 		| 'notBetween'
+		| 'in'
+		| 'notIn'
+		| 'list'
 	);
 }

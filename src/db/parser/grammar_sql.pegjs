@@ -1276,6 +1276,33 @@ expr_rest_boolean_comparison
 		};
 	}
 
+expr_rest_in
+= __ neg:('not'i __)? 'in'i _ '(' _
+    first:expr_precedence4 rest:(_ ',' _ expr_precedence4)*
+  _ ')'
+	{
+		var listObj = {
+			type: 'valueExpr',
+			datatype: 'null',
+			func: 'list',
+			args: [first],
+
+			codeInfo: getCodeInfo()
+		};
+
+		for(var i = 0; i < rest.length; i++){
+			listObj.args.push(rest[i][3]);
+		}
+
+		return {
+			type: 'valueExpr',
+			datatype: 'boolean',
+			func: (neg !== null) ? 'notIn' : 'in',
+			args: [undefined, listObj],
+
+			codeInfo: getCodeInfo()
+		};
+	}
 
 expr_rest_number_add
 = _ o:('-' / '+') _ right:expr_precedence3
@@ -1645,7 +1672,7 @@ reference: https://dev.mysql.com/doc/refman/5.7/en/operator-precedence.html
 2: - (unary minus)
 3: *, /, %
 4: -, +
-5: = (comparison), >=, >, <=, <, <>, !=, IS, LIKE, REGEXP
+5: = (comparison), >=, >, <=, <, <>, !=, IS, LIKE, REGEXP, IN
 6: CASE, WHEN, THEN, ELSE
 7: AND
 8: XOR
@@ -1676,7 +1703,7 @@ expr_precedence6
 / expr_precedence5
 
 expr_precedence5
-= first:expr_precedence4 rest:( expr_rest_boolean_comparison / expr_rest_between )+
+= first:expr_precedence4 rest:( expr_rest_boolean_comparison / expr_rest_between / expr_rest_in )+
 	{ return buildBinaryValueExpr(first, rest); }
 / expr_precedence4
 

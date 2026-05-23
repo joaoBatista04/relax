@@ -186,7 +186,7 @@ export class ValueExprColumnValue extends ValueExpr {
 	}
 
 	getDataType() {
-		if(this._type === null){
+		if (this._type === null) {
 			throw new Error(`type should have been set by check`);
 		}
 		return this._type;
@@ -201,7 +201,7 @@ export class ValueExprColumnValue extends ValueExpr {
 	}
 
 	evaluate(tupleA: Tuple, tupleB: Tuple, row: number, statementSession: Session) {
-		if(this._index === null){
+		if (this._index === null) {
 			throw new Error(`index should have been set by check`);
 		}
 		if (this._index >= tupleA.length) {
@@ -299,7 +299,7 @@ export class ValueExprGeneric extends ValueExpr {
 		const groups = regex.exec(str);
 
 		if (groups === null) {
-			throw new ExecutionError(i18n.t('db.messages.exec.error-invalid-date-format', {str: str}), this._codeInfo);
+			throw new ExecutionError(i18n.t('db.messages.exec.error-invalid-date-format', { str: str }), this._codeInfo);
 		}
 
 		const year = parseInt(groups[1], 10);
@@ -308,7 +308,7 @@ export class ValueExprGeneric extends ValueExpr {
 		const date = new Date(year, month, day);
 
 		if (date.getFullYear() !== year || date.getMonth() !== month || date.getDate() !== day) {
-			this.throwExecutionError(i18n.t('db.messages.exec.error-invalid-date-format', {str: str}));
+			this.throwExecutionError(i18n.t('db.messages.exec.error-invalid-date-format', { str: str }));
 		}
 		return date;
 	}
@@ -369,6 +369,12 @@ export class ValueExprGeneric extends ValueExpr {
 				else if (type === 'date') {
 					return this._parseIsoDate(value);
 				}
+			case 'list':
+				const list = [];
+				for (let i = 0; i < this._args.length; i++) {
+					list.push(this._args[i].evaluate(tupleA, tupleB, row, statementSession));
+				}
+				return list;
 			default:
 				throw new Error('this should not happen!');
 		}
@@ -378,9 +384,9 @@ export class ValueExprGeneric extends ValueExpr {
 		let a, b;
 
 		if (
-			this._func === 'transaction_timestamp' 
-			|| this._func === 'statement_timestamp' 
-			|| this._func === 'now' 
+			this._func === 'transaction_timestamp'
+			|| this._func === 'statement_timestamp'
+			|| this._func === 'now'
 			|| this._func === 'clock_timestamp'
 		) {
 			// dates are the same due to lack of transaction concept
@@ -444,28 +450,28 @@ export class ValueExprGeneric extends ValueExpr {
 
 		switch (this._func) {
 			case 'not':
-				if (a === 'unknown'){
+				if (a === 'unknown') {
 					return a;
 				}
 				return !a;
 			case 'and':
-				if (a === false || b === false){
+				if (a === false || b === false) {
 					return false;
 				}
-				if (a === true && b === true){
+				if (a === true && b === true) {
 					return true;
 				}
 				return 'unknown';
 			case 'or':
-				if (a === true || b === true){
+				if (a === true || b === true) {
 					return true;
 				}
-				if (a === false && b === false){
+				if (a === false && b === false) {
 					return false;
 				}
 				return 'unknown';
 			case 'xor':
-				if (a === 'unknown' || b === 'unknown'){
+				if (a === 'unknown' || b === 'unknown') {
 					return 'unknown';
 				}
 				return (a !== b);
@@ -495,10 +501,22 @@ export class ValueExprGeneric extends ValueExpr {
 			case 'ilike':
 			case 'regexp':
 			case 'rlike':
-				if(!this._regex){
+				if (!this._regex) {
 					throw new Error(`regex should have been set by check`);
 				}
 				return this._regex.test(a);
+			case 'in':
+			case 'notIn': {
+				const list = this._args[1].evaluate(tupleA, tupleB, row, statementSession);
+				if (!Array.isArray(list)) {
+					throw new Error(`${this._func} expects a list`);
+				}
+				if (a === null || a === 'unknown') {
+					return 'unknown';
+				}
+				const found = list.some((item: any) => item === a);
+				return this._func === 'in' ? found : !found;
+			}
 			default:
 				throw new Error('this should not happen!');
 		}
@@ -512,13 +530,13 @@ export class ValueExprGeneric extends ValueExpr {
 				case '=':
 				case '>=':
 				case '<=':
-					if (valueA === valueB){
+					if (valueA === valueB) {
 						return true;
 					}
 					return 'unknown';
 				case '<':
 				case '>':
-					if (valueA === valueB){
+					if (valueA === valueB) {
 						return false;
 					}
 					return 'unknown';
@@ -683,6 +701,27 @@ export class ValueExprGeneric extends ValueExpr {
 				let regex_txt = txt;
 				this._regex = new RegExp(regex_txt);
 				break;
+			case 'in':
+			case 'notIn':
+				this._args[0].check(schemaA, schemaB);
+				this._args[1].check(schemaA, schemaB);
+				typeA = this._args[0].getDataType();
+				if (typeA === 'null') {
+					return true;
+				}
+				const listArg = this._args[1];
+				if (listArg._func === 'list') {
+					for (let i = 0; i < listArg._args.length; i++) {
+						const itemType = listArg._args[i].getDataType();
+						if (itemType !== 'null' && itemType !== typeA) {
+							this.throwExecutionError(i18n.t('db.messages.exec.error-could-not-compare-different-types', {
+								typeA: typeA,
+								typeB: itemType,
+							}));
+						}
+					}
+				}
+				break;
 			default:
 				throw new Error('this should not happen!');
 		}
@@ -751,8 +790,8 @@ export class ValueExprGeneric extends ValueExpr {
 
 				const sLength = s.length;
 
-  				// 1-based indexing: MySQL starts at 1
-  				let startIndex = start >= 0 ? start - 1 : sLength + start;
+				// 1-based indexing: MySQL starts at 1
+				let startIndex = start >= 0 ? start - 1 : sLength + start;
 
 				// Clamp startIndex to [0, sLength]
 				if (startIndex < 0) startIndex = 0;
@@ -764,7 +803,7 @@ export class ValueExprGeneric extends ValueExpr {
 				}
 
 				// If length is negative, return empty string (MySQL behavior)
-  				if (length < 0) return '';
+				if (length < 0) return '';
 
 				return s.substring(startIndex, startIndex + length);
 			default:
@@ -815,7 +854,7 @@ export class ValueExprGeneric extends ValueExpr {
 					return null;
 				}
 				return Math.log(valueB) / Math.log(valueA);
-	
+
 			case 'mod':
 				if (valueA === null || valueB === null) {
 					return null;
@@ -988,7 +1027,7 @@ export class ValueExprGeneric extends ValueExpr {
 						this._dataTypeCalculated = dataType;
 					}
 					else if (dataType !== 'null' && this._dataType !== dataType) {
-						this.throwExecutionError(i18n.t('db.messages.exec.error-function-expects-arguments-of-same-type', {func: 'COALESCE()'}));
+						this.throwExecutionError(i18n.t('db.messages.exec.error-function-expects-arguments-of-same-type', { func: 'COALESCE()' }));
 					}
 				}
 				break;
@@ -1036,6 +1075,11 @@ export class ValueExprGeneric extends ValueExpr {
 
 				this._dataTypeCalculated = type;
 				break;
+			case 'list':
+				for (let i = 0; i < this._args.length; i++) {
+					this._args[i].check(schemaA, schemaB);
+				}
+				break;
 			default:
 				throw new Error('this should not happen!');
 		}
@@ -1064,8 +1108,8 @@ export class ValueExprGeneric extends ValueExpr {
 				this._args[1].check(schemaA, schemaB);
 				const typeCount = this._args[1].getDataType();
 
-				if ( (typeStr !== 'string' && typeStr !== 'null') ||
-					 (typeCount !== 'number' && typeCount !== 'null') ) {
+				if ((typeStr !== 'string' && typeStr !== 'null') ||
+					(typeCount !== 'number' && typeCount !== 'null')) {
 					this.throwExecutionError(i18n.t('db.messages.exec.error-function-expects-type', {
 						func: 'repeat()',
 						expected: ['string', 'number'],
@@ -1103,7 +1147,7 @@ export class ValueExprGeneric extends ValueExpr {
 
 				// Check whether there are 2 or 3 arguments
 				if (this._args.length === 2) {
-					if ( (typeStrSub !== 'string' && typeStrSub !== 'null') ||
+					if ((typeStrSub !== 'string' && typeStrSub !== 'null') ||
 						(typeStart !== 'number' && typeStart !== 'null')) {
 						this.throwExecutionError(i18n.t('db.messages.exec.error-function-expects-type', {
 							func: 'SUBSTRING()',
@@ -1117,9 +1161,9 @@ export class ValueExprGeneric extends ValueExpr {
 					this._args[2]?.check(schemaA, schemaB);
 					const typeLength = this._args[2]?.getDataType();
 
-					if ( (typeStrSub !== 'string' && typeStrSub !== 'null') ||
+					if ((typeStrSub !== 'string' && typeStrSub !== 'null') ||
 						(typeStart !== 'number' && typeStart !== 'null') ||
-						(typeLength !== 'number' && typeLength !== 'null') ) {
+						(typeLength !== 'number' && typeLength !== 'null')) {
 						this.throwExecutionError(i18n.t('db.messages.exec.error-function-expects-type', {
 							func: 'SUBSTRING()',
 							expected: ['string', 'number', 'number'],
@@ -1215,14 +1259,14 @@ export class ValueExprGeneric extends ValueExpr {
 			let s = '';
 
 			s += `<span> ${(func_name || this._func)} </span>`;
-			
+
 			s = this._args[0].getFormulaHtml() + s;
 			s += this._args[1].getFormulaHtml();
 			return `<span>${s}</span>`;
 		};
 
 		function getFormula(this: ValueExprGeneric): string | number {
-			const {_func} = this;
+			const { _func } = this;
 			switch (_func) {
 				case 'constant': {
 					const value = this._args[0] as Data;
@@ -1252,7 +1296,7 @@ export class ValueExprGeneric extends ValueExpr {
 				case 'coalesce':
 				case 'upper':
 				case 'lower':
-				case 'replace':	
+				case 'replace':
 				case 'reverse':
 				case 'repeat':
 				case 'substring':
@@ -1321,6 +1365,21 @@ export class ValueExprGeneric extends ValueExpr {
 						return `<span>${betweenExpr}</span>`;
 					} else {
 						return `<span>¬ (${betweenExpr})</span>`;
+					}
+				}
+				case 'in':
+				case 'notIn': {
+					const left = this._args[0].getFormulaHtml();
+					const listArg = this._args[1];
+					const parts: string[] = [];
+					for (let i = 0; i < listArg._args.length; i++) {
+						parts.push(`${left} = ${listArg._args[i].getFormulaHtml()}`);
+					}
+					const inExpr = parts.join(' ∨ ');
+					if (_func === 'in') {
+						return `<span>${inExpr}</span>`;
+					} else {
+						return `<span>¬ (${inExpr})</span>`;
 					}
 				}
 			}

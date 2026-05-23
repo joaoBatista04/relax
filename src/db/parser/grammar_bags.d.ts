@@ -418,5 +418,8 @@ declare module bagsAst {
 		| "cast"
 		| 'between'
 		| 'notBetween'
+		| 'in'
+		| 'notIn'
+		| 'list'
 	);
 }
