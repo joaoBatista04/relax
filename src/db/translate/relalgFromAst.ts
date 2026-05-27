@@ -741,6 +741,31 @@ export function relalgFromSQLAstRoot(astRoot: sqlAst.rootSql | any, relations: {
 		return arg.type === 'column' && arg.alias;
 	}
 
+	function extractInSubquery(node: any): { leftExpr: any, subqueryStatement: any, isNotIn: boolean } | null {
+		if (node && node.type === 'valueExpr' && node.datatype === 'boolean' &&
+			(node.func === 'in' || node.func === 'notIn') &&
+			node.args && node.args.length >= 2 &&
+			node.args[1] && node.args[1].type === 'valueExpr' && node.args[1].func === 'statementSubquery') {
+			return {
+				leftExpr: node.args[0],
+				subqueryStatement: node.args[1].args[0],
+				isNotIn: node.func === 'notIn',
+			};
+		}
+		return null;
+	}
+
+	function getLeftColumnInfo(expr: any): { name: string, alias: string | null } | null {
+		if (expr && expr.type === 'valueExpr' && expr.datatype === 'null' && expr.func === 'columnValue' &&
+			expr.args && expr.args.length >= 2 && typeof expr.args[0] === 'string') {
+			return {
+				name: expr.args[0],
+				alias: expr.args[1] || null,
+			};
+		}
+		return null;
+	}
+
 	function parseStatement(statement: sqlAst.statement) {
 		const projectionArgs = statement.select.arg;
 
@@ -751,8 +776,61 @@ export function relalgFromSQLAstRoot(astRoot: sqlAst.rootSql | any, relations: {
 
 		// selection
 		if (statement.where !== null) {
-			root = getSelection(root, statement.where.arg, statement.where.codeInfo);
-			setCodeInfoFromNode(root, statement.where);
+			const whereArg = statement.where.arg;
+			const inInfo = extractInSubquery(whereArg);
+			if (inInfo) {
+				const subqueryRoot = rec(inInfo.subqueryStatement);
+				subqueryRoot.check();
+
+				root.check();
+				const outerSchemaSize = root.getSchema().getSize();
+
+				const leftExpr = recValueExpr(inInfo.leftExpr);
+				const subquerySchema = subqueryRoot.getSchema();
+				const rightCol = new ValueExpr.ValueExprColumnValue(
+					subquerySchema.getColumn(0).getName() + '',
+					subquerySchema.getColumn(0).getRelAlias(),
+					outerSchemaSize,
+				);
+				const condExpr = new ValueExpr.ValueExprGeneric('boolean', '=', [leftExpr, rightCol]);
+
+				const joinCondition: JoinCondition = {
+					type: 'theta',
+					joinExpression: condExpr,
+				};
+
+				if (inInfo.isNotIn) {
+					const leftColInfo = getLeftColumnInfo(inInfo.leftExpr);
+					if (leftColInfo) {
+						const leftProj = new Projection(root, [new Column(leftColInfo.name, leftColInfo.alias)]);
+						const subqueryColName = subquerySchema.getColumn(0).getName() + '';
+						const subqueryColAlias = subquerySchema.getColumn(0).getRelAlias();
+
+						let rightProj: RANode;
+						if (subquerySchema.getSize() === 1) {
+							rightProj = subqueryRoot;
+						} else {
+							rightProj = new Projection(subqueryRoot, [new Column(subqueryColName, subqueryColAlias)]);
+						}
+
+						if (leftColInfo.name !== subqueryColName) {
+							const rename = new RenameColumns(rightProj);
+							rename.addRenaming(leftColInfo.name, subqueryColName, subqueryColAlias as string);
+							rightProj = rename;
+						}
+
+						root = new SemiJoin(root, new Difference(leftProj, rightProj), true);
+					} else {
+						root = new AntiJoin(root, subqueryRoot, joinCondition);
+					}
+				} else {
+					root = new SemiJoin(root, subqueryRoot, true, joinCondition);
+				}
+				setCodeInfoFromNode(root, statement.where);
+			} else {
+				root = getSelection(root, whereArg, statement.where.codeInfo);
+				setCodeInfoFromNode(root, statement.where);
+			}
 		}
 
 		// group-by + aggregation

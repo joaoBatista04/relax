@@ -51,6 +51,7 @@ export abstract class RANode {
 	_wrappedInParentheses: boolean = false;
 	_warnings: Warning[] = [];
 	_execTime: any;
+	_subqueryNodes: RANode[] = [];
 	
 	constructor(functionName = '') {
 		this._functionName = functionName;
@@ -107,6 +108,10 @@ export abstract class RANode {
 		}
 
 		return this._resultNumRows;
+	}
+
+	getSubqueryNodes(): RANode[] {
+		return this._subqueryNodes;
 	}
 
 	protected setResultNumRows(num: number) {

@@ -57,6 +57,10 @@ export class RaTree extends React.Component<Props> {
 					: null
 			);
 
+			const subqueryChildren: JSX.Element[] = n.getSubqueryNodes().map((sq, i) => (
+				<li key={`sq-${i}`}>{rec(sq).props.children}</li>
+			));
+
 			let fromVariableMarker: string | JSX.Element = '';
 			if (n.hasMetaData('fromVariable')) {
 				// Split relation aliases into array
@@ -151,11 +155,12 @@ export class RaTree extends React.Component<Props> {
 
 						</Popover>
 					</div>
-					{child || child2
+					{child || child2 || subqueryChildren.length > 0
 						? (
 							<ul>
 								{child}
 								{child2}
+								{subqueryChildren}
 							</ul>
 						)
 						: null
