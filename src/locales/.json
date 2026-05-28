@@ -35,6 +35,7 @@
 	"db.messages.exec.error-invalid-projection-error": "",
 	"db.messages.exec.error-function-expects-type": "",
 	"db.messages.exec.error-could-not-compare-different-types": "",
+	"db.messages.exec.error-subquery-must-return-single-column": "",
 	"db.messages.exec.error-function-expects-arguments-of-same-type": "",
 	"db.messages.exec.error-case-when-condition-must-be-boolean": "",
 	"db.messages.exec.error-case-when-expects-results-of-same-type": "",

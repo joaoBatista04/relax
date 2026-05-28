@@ -522,7 +522,13 @@ export class ValueExprGeneric extends ValueExpr {
 				if (a === null || a === 'unknown') {
 					return 'unknown';
 				}
-				const found = list.some((item: any) => item === a);
+				const found = list.some((item: any) => {
+					if (Array.isArray(a) && Array.isArray(item)) {
+						if (a.length !== item.length) return false;
+						return a.every((val: any, j: number) => val === item[j]);
+					}
+					return item === a;
+				});
 				return this._func === 'in' ? found : !found;
 			}
 			default:
@@ -715,6 +721,23 @@ export class ValueExprGeneric extends ValueExpr {
 				this._args[1].check(schemaA, schemaB);
 				typeA = this._args[0].getDataType();
 				if (typeA === 'null') {
+					// validate cardinality and types when left is a tuple (list) and right is a value list
+					if (this._args[0]._func === 'list' && this._args[1]._func === 'list') {
+						const leftSize = this._args[0]._args.length;
+						for (let i = 0; i < this._args[1]._args.length; i++) {
+							const item = this._args[1]._args[i];
+							if (item._func !== 'list' || item._args.length !== leftSize) {
+								this.throwExecutionError(`each value in the IN list must be a tuple with ${leftSize} column(s)`);
+							}
+							for (let j = 0; j < leftSize; j++) {
+								const leftType = this._args[0]._args[j].getDataType();
+								const rightType = item._args[j].getDataType();
+								if (leftType !== 'null' && rightType !== 'null' && leftType !== rightType) {
+									this.throwExecutionError(`could not compare value if types are different: ${leftType} != ${rightType}`);
+								}
+							}
+						}
+					}
 					return true;
 				}
 				const listArg = this._args[1];
@@ -731,6 +754,12 @@ export class ValueExprGeneric extends ValueExpr {
 				}
 				else if (listArg._func === 'statementSubquery') {
 					const subquerySchema = listArg._args[0].getSchema();
+					if (subquerySchema.getSize() !== 1) {
+						this.throwExecutionError(i18n.t('db.messages.exec.error-subquery-must-return-single-column', {
+							expected: 1,
+							actual: subquerySchema.getSize(),
+						}));
+					}
 					if (subquerySchema.getSize() > 0) {
 						const itemType = subquerySchema.getType(0);
 						if (itemType !== 'null' && itemType !== typeA) {
@@ -1399,11 +1428,10 @@ export class ValueExprGeneric extends ValueExpr {
 				const listArg = this._args[1];
 				if (listArg._func === 'statementSubquery') {
 					const subqueryFormula = listArg._args[0].getFormulaHtml(false, false);
-					const inExpr = `${left} ∈ ${subqueryFormula}`;
 					if (_func === 'in') {
-						return `<span>${inExpr}</span>`;
+						return `<span>${left} IN ${subqueryFormula}</span>`;
 					} else {
-						return `<span>¬ (${inExpr})</span>`;
+						return `<span>${left} NOT IN ${subqueryFormula}</span>`;
 					}
 				}
 				const parts: string[] = [];
@@ -1416,6 +1444,13 @@ export class ValueExprGeneric extends ValueExpr {
 				} else {
 					return `<span>¬ (${inExpr})</span>`;
 				}
+			}
+			case 'list': {
+				const listParts: string[] = [];
+				for (let i = 0; i < this._args.length; i++) {
+					listParts.push(this._args[i].getFormulaHtml());
+				}
+				return `(${listParts.join(', ')})`;
 			}
 			}
 

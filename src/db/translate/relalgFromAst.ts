@@ -766,6 +766,49 @@ export function relalgFromSQLAstRoot(astRoot: sqlAst.rootSql | any, relations: {
 		return null;
 	}
 
+	function getLeftExprSize(expr: any): number {
+		if (expr && expr.type === 'valueExpr' && expr.func === 'list') {
+			return expr.args.length;
+		}
+		return 1;
+	}
+
+	function buildInJoinCondition(
+		leftExpr: any,
+		subquerySchema: Schema,
+		outerSchemaSize: number,
+	): ValueExpr.ValueExpr {
+		if (leftExpr && leftExpr.type === 'valueExpr' && leftExpr.func === 'list') {
+			const conditions: ValueExpr.ValueExpr[] = [];
+			for (let i = 0; i < leftExpr.args.length; i++) {
+				const leftItem = recValueExpr(leftExpr.args[i]);
+				const colName = leftExpr.args[i].args[0] + '';
+				const colAlias = leftExpr.args[i].args[1] || null;
+				const rightColIndex = subquerySchema.getColumnIndex(colName, colAlias, true);
+				const rightCol = new ValueExpr.ValueExprColumnValue(
+					colName,
+					subquerySchema.getColumn(rightColIndex).getRelAlias(),
+					outerSchemaSize + rightColIndex,
+				);
+				conditions.push(new ValueExpr.ValueExprGeneric('boolean', '=', [leftItem, rightCol]));
+			}
+			if (conditions.length === 1) return conditions[0];
+			let result = conditions[0];
+			for (let i = 1; i < conditions.length; i++) {
+				result = new ValueExpr.ValueExprGeneric('boolean', 'and', [result, conditions[i]]);
+			}
+			return result;
+		} else {
+			const leftItem = recValueExpr(leftExpr);
+			const rightCol = new ValueExpr.ValueExprColumnValue(
+				subquerySchema.getColumn(0).getName() + '',
+				subquerySchema.getColumn(0).getRelAlias(),
+				outerSchemaSize,
+			);
+			return new ValueExpr.ValueExprGeneric('boolean', '=', [leftItem, rightCol]);
+		}
+	}
+
 	function parseStatement(statement: sqlAst.statement) {
 		const projectionArgs = statement.select.arg;
 
@@ -777,22 +820,24 @@ export function relalgFromSQLAstRoot(astRoot: sqlAst.rootSql | any, relations: {
 		// selection
 		if (statement.where !== null) {
 			const whereArg = statement.where.arg;
-			const inInfo = extractInSubquery(whereArg);
-			if (inInfo) {
+
+			function processInSubquery(root: RANode, inInfo: { leftExpr: any, subqueryStatement: any, isNotIn: boolean }): RANode {
 				const subqueryRoot = rec(inInfo.subqueryStatement);
 				subqueryRoot.check();
 
 				root.check();
 				const outerSchemaSize = root.getSchema().getSize();
 
-				const leftExpr = recValueExpr(inInfo.leftExpr);
 				const subquerySchema = subqueryRoot.getSchema();
-				const rightCol = new ValueExpr.ValueExprColumnValue(
-					subquerySchema.getColumn(0).getName() + '',
-					subquerySchema.getColumn(0).getRelAlias(),
-					outerSchemaSize,
-				);
-				const condExpr = new ValueExpr.ValueExprGeneric('boolean', '=', [leftExpr, rightCol]);
+				const leftColCount = getLeftExprSize(inInfo.leftExpr);
+				if (subquerySchema.getSize() !== leftColCount) {
+					throw new ExecutionError(i18n.t('db.messages.exec.error-subquery-must-return-single-column', {
+						expected: leftColCount,
+						actual: subquerySchema.getSize(),
+					}));
+				}
+
+				const condExpr = buildInJoinCondition(inInfo.leftExpr, subquerySchema, outerSchemaSize);
 
 				const joinCondition: JoinCondition = {
 					type: 'theta',
@@ -801,7 +846,7 @@ export function relalgFromSQLAstRoot(astRoot: sqlAst.rootSql | any, relations: {
 
 				if (inInfo.isNotIn) {
 					const leftColInfo = getLeftColumnInfo(inInfo.leftExpr);
-					if (leftColInfo) {
+					if (leftColInfo && leftColCount === 1) {
 						const leftProj = new Projection(root, [new Column(leftColInfo.name, leftColInfo.alias)]);
 						const subqueryColName = subquerySchema.getColumn(0).getName() + '';
 						const subqueryColAlias = subquerySchema.getColumn(0).getRelAlias();
@@ -819,17 +864,121 @@ export function relalgFromSQLAstRoot(astRoot: sqlAst.rootSql | any, relations: {
 							rightProj = rename;
 						}
 
-						root = new SemiJoin(root, new Difference(leftProj, rightProj), true);
+						return new SemiJoin(root, new Difference(leftProj, rightProj), true);
+					} else if (inInfo.leftExpr && inInfo.leftExpr.type === 'valueExpr' && inInfo.leftExpr.func === 'list') {
+						const leftExpr = inInfo.leftExpr;
+						const leftCols: Column[] = [];
+						const rightRenameList: { newName: string, oldName: string, oldAlias: string | null }[] = [];
+
+						for (let i = 0; i < leftExpr.args.length; i++) {
+							const arg = leftExpr.args[i];
+							const colName = arg.args[0] + '';
+							const colAlias = arg.args[1] || null;
+
+							leftCols.push(new Column(colName, colAlias));
+
+							const rightColIndex = subquerySchema.getColumnIndex(colName, colAlias, true);
+							const schemaCol = subquerySchema.getColumn(rightColIndex);
+							const schemaColName = schemaCol.getName() + '';
+							const schemaColAlias = schemaCol.getRelAlias();
+
+							rightRenameList.push({
+								newName: colName,
+								oldName: schemaColName,
+								oldAlias: schemaColAlias,
+							});
+						}
+
+						const leftProj = new Projection(root, leftCols);
+
+						const colsMatchExactly = subquerySchema.getSize() === leftCols.length &&
+							rightRenameList.every((r, i) => {
+								const c = subquerySchema.getColumn(i);
+								return c.getName() + '' === r.oldName && c.getRelAlias() === r.oldAlias;
+							});
+
+						let rightProj: RANode;
+						if (colsMatchExactly) {
+							rightProj = subqueryRoot;
+						} else {
+							const rightProjCols = rightRenameList.map(r => new Column(r.oldName, r.oldAlias));
+							rightProj = new Projection(subqueryRoot, rightProjCols);
+						}
+
+						const needsRename = rightRenameList.some(r => r.newName !== r.oldName);
+						if (needsRename) {
+							const rename = new RenameColumns(rightProj);
+							for (const r of rightRenameList) {
+								if (r.newName !== r.oldName) {
+									rename.addRenaming(r.newName, r.oldName, r.oldAlias);
+								}
+							}
+							rightProj = rename;
+						}
+
+						return new SemiJoin(root, new Difference(leftProj, rightProj), true);
 					} else {
-						root = new AntiJoin(root, subqueryRoot, joinCondition);
+						return new AntiJoin(root, subqueryRoot, joinCondition);
 					}
 				} else {
-					root = new SemiJoin(root, subqueryRoot, true, joinCondition);
+					return new SemiJoin(root, subqueryRoot, true, joinCondition);
 				}
-				setCodeInfoFromNode(root, statement.where);
+			}
+
+			// extract IN subqueries from AND conjunctions only
+			// (OR would be semantically incorrect since SemiJoin acts as AND)
+			const extractedSubqueries: { leftExpr: any, subqueryStatement: any, isNotIn: boolean }[] = [];
+			function replaceInSubqueries(expr: any): any {
+				if (!expr || expr.type !== 'valueExpr' || expr.datatype !== 'boolean') return expr;
+
+				const inInfo = extractInSubquery(expr);
+				if (inInfo) {
+					extractedSubqueries.push(inInfo);
+					return { type: 'valueExpr', datatype: 'boolean', func: 'constant', args: [true] };
+				}
+
+				if (expr.func === 'and') {
+					const newArgs: any[] = [];
+					for (const a of expr.args) {
+						const result = replaceInSubqueries(a);
+						if (!(result.type === 'valueExpr' && result.func === 'constant' && result.args[0] === true)) {
+							newArgs.push(result);
+						}
+					}
+					if (newArgs.length === 0) {
+						return { type: 'valueExpr', datatype: 'boolean', func: 'constant', args: [true] };
+					}
+					if (newArgs.length === 1) {
+						return newArgs[0];
+					}
+					return { ...expr, args: newArgs };
+				}
+
+				return expr;
+			}
+			const remainingExpr = replaceInSubqueries(whereArg);
+
+			if (extractedSubqueries.length > 0) {
+				const isOnlyTrue = remainingExpr.type === 'valueExpr' && remainingExpr.func === 'constant' && remainingExpr.args[0] === true;
+
+				if (!isOnlyTrue) {
+					root = getSelection(root, remainingExpr, statement.where.codeInfo);
+					setCodeInfoFromNode(root, statement.where);
+				}
+
+				for (const extracted of extractedSubqueries) {
+					root = processInSubquery(root, extracted);
+					setCodeInfoFromNode(root, statement.where);
+				}
 			} else {
-				root = getSelection(root, whereArg, statement.where.codeInfo);
-				setCodeInfoFromNode(root, statement.where);
+				const inInfo = extractInSubquery(whereArg);
+				if (inInfo) {
+					root = processInSubquery(root, inInfo);
+					setCodeInfoFromNode(root, statement.where);
+				} else {
+					root = getSelection(root, whereArg, statement.where.codeInfo);
+					setCodeInfoFromNode(root, statement.where);
+				}
 			}
 		}
 

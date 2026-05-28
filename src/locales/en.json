@@ -35,6 +35,7 @@
 	"db.messages.exec.error-invalid-projection-error": "invalid projection \"{{argument}}\": {{error}}",
 	"db.messages.exec.error-function-expects-type": "function \"{{func}}\" expects arguments of type \"{{expected}}\" but \"{{given}}\" given",
 	"db.messages.exec.error-could-not-compare-different-types": "could not compare value if types are different: {{typeA}} != {{typeB}}",
+	"db.messages.exec.error-subquery-must-return-single-column": "subquery must return the same number of columns as the left-hand expression (expected {{expected}}, got {{actual}})",
 	"db.messages.exec.error-function-expects-arguments-of-same-type": "{{func}} expects all arguments to be of the same type",
 	"db.messages.exec.error-case-when-condition-must-be-boolean": "the condition of a CASE WHEN must be of type boolean",
 	"db.messages.exec.error-case-when-expects-results-of-same-type": "<i>CASE WHEN condition THEN result END</i> expects all <i>results<i/> to be of the same type",

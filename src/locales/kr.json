@@ -35,6 +35,7 @@
 	"db.messages.exec.error-invalid-projection-error": "\uc720\ud6a8\ud558\uc9c0 \uc54a\uc740 \ud504\ub85c\uc81d\uc158 \"__argument__\": __error__",
 	"db.messages.exec.error-function-expects-type": "\ud568\uc218 \"__func__\"\ub294 \uc778\uc790 \ud0c0\uc785  \"__expected__\" \uc73c\ub85c \uae30\ub300\ud558\uc9c0\ub9cc  \"__given__\" \uc774 \uc8fc\uc5b4\uc9d0",
 	"db.messages.exec.error-could-not-compare-different-types": "\ud0c0\uc785\uc774 \ub2e4\ub974\uba74 \ube44\uad50\ud560 \uc218 \uc5c6\uc74c: __typeA__ != __typeB__",
+	"db.messages.exec.error-subquery-must-return-single-column": "\ud558\uc704 \uc9c8\uc758\ub294 \uc67c\ucabd \ud45c\ud604\uc2dd\uacfc \ub3d9\uc77c\ud55c \uc5f4 \uc218\ub97c \ubc18\ud658\ud574\uc57c \ud569\ub2c8\ub2e4 (\uc608\uc0c1: {{expected}}, \uc2e4\uc81c: {{actual}})",
 	"db.messages.exec.error-function-expects-arguments-of-same-type": "__func__ \ub294 \ubaa8\ub4e0 \uc778\uc790\uac00 \uac19\uc740 \ud0c0\uc785\uc73c\ub85c \uae30\ub300\ud568",
 	"db.messages.exec.error-case-when-condition-must-be-boolean": "CASE WHEN \uc870\uac74\uc740 \ubd88\ub9b0 \ud0c0\uc785\uc774\uc5b4\uc57c \ud568",
 	"db.messages.exec.error-case-when-expects-results-of-same-type": "<i>CASE WHEN condition THEN result END</i>\ub294 \ubaa8\ub4e0 <i>\uacb0\uacfc<i/>\uac00 \uac19\uc740 \ud0c0\uc785\uc73c\ub85c \uae30\ub300\ud568",

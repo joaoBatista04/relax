@@ -35,6 +35,7 @@
 	"db.messages.exec.error-invalid-projection-error": "ung\u00fcltige Projektion \"{{argument}}\": {{error}}",
 	"db.messages.exec.error-function-expects-type": "Funktion \"{{func}}\" erwartet Argumente vom Typ \"{{expected}}\" aber \"{{given}}\" gefunden",
 	"db.messages.exec.error-could-not-compare-different-types": "Werte mit unterschiedlichen Datentypen k\u00f6nnen nicht verglichen werden: {{typeA}} != {{typeB}}",
+	"db.messages.exec.error-subquery-must-return-single-column": "Unterabfrage muss die gleiche Anzahl an Spalten wie der linke Ausdruck zur\u00fcckgeben (erwartet {{expected}}, erhalten {{actual}})",
 	"db.messages.exec.error-function-expects-arguments-of-same-type": "Funktion {{func}} erwartet, dass alle Argumente den selben Datentyp haben.",
 	"db.messages.exec.error-case-when-condition-must-be-boolean": "Die Bedingung f\u00fcr ein CASE WHEN muss ein boolscher Ausdruck sein",
 	"db.messages.exec.error-case-when-expects-results-of-same-type": "<i>CASE WHEN condition THEN result END</i> erwartet dass alle <i>results</> vom selben Typ sind",

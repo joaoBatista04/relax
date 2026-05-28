@@ -1751,6 +1751,20 @@ expr_precedence0
 / valueExprFunctionsTernary
 / valueExprFunctionsNary
 / valueExprColumn
+/ '(' _ first:expr_precedence9 rest:(_ ',' _ expr_precedence9)+ _ ')'
+	{
+		var listObj = {
+			type: 'valueExpr',
+			datatype: 'null',
+			func: 'list',
+			args: [first],
+			codeInfo: getCodeInfo()
+		};
+		for (var i = 0; i < rest.length; i++) {
+			listObj.args.push(rest[i][3]);
+		}
+		return listObj;
+	}
 / '(' _ e:expr_precedence9 _ ')'
 	{
 		e.wrappedInParentheses = true;
