@@ -2780,17 +2780,6 @@ export class Help extends React.Component<Props> {
 								<br /><code className="relalg">R ⋉ ( &pi; a ( R ) - &pi; b ( S ) )</code>
 							</div>
 
-							<p>When combined with other conditions via <code>AND</code>, the remaining conditions are applied as a
-								<a href="#relalg-operations-selection">selection</a> before the semi-join.
-								For <code>OR</code> combinations the <code>IN</code>/<code>NOT IN</code> is kept as a textual
-								condition inside the selection, since the semi-join translation would be semantically incorrect.</p>
-
-							<div className="example">
-								<code className="sql">select distinct * from R where a in (select b from S) and x &gt; 1</code>
-								is translated to
-								<br /><code className="relalg">&sigma; x &gt; 1 ( R ) ⋉ S</code>
-							</div>
-
 							<p>Multi-column tuples are also supported:</p>
 
 							<div className="example">
@@ -2805,7 +2794,7 @@ export class Help extends React.Component<Props> {
 								<br /><code className="relalg">R ⋉ ( &pi; a, b ( R ) - &pi; c, d ( S ) )</code>
 							</div>
 
-							<p>Subquery Expressions like <code>EXISTS</code>, <code>ANY/SOME</code> or <code>ALL</code>
+							<p>Other Subquery Expressions like <code>EXISTS</code>, <code>ANY/SOME</code> or <code>ALL</code>
 								are <strong>not supported</strong> because their translation into relational algebra is not trivial and
 								modern database systems use an extended set of operators internally that do not require a one-to-one
 								translation into "classNameical" relational algebra. Therefore the learning effect for users of this tool
