@@ -2067,6 +2067,29 @@ export class Help extends React.Component<Props> {
 									</td>
 								</tr>
 								<tr>
+									<td><code>a IN (value [, ...])</code></td>
+									<td>boolean</td>
+									<td>returns true if <code>a</code> equals any value in the list on the right side.
+										All values must have the same type and the list must have at least one element.
+										<br />Multiple columns can be tested simultaneously using tuple syntax:
+										<code>(a, b) IN ((1, 2), (3, 4))</code>.
+										<br />A subquery can also be used: <code>a IN (SELECT b FROM S)</code> —
+										in SQL mode this is translated to a <a href="#relalg-operations-leftsemijoin">left semi join</a>.
+									</td>
+								</tr>
+								<tr>
+									<td><code>a NOT IN (value [, ...])</code></td>
+									<td>boolean</td>
+									<td>returns true if <code>a</code> does not equal any value in the list on the right side.
+										All values must have the same type and the list must have at least one element.
+										<br />Multiple columns can be tested simultaneously using tuple syntax:
+										<code>(a, b) NOT IN ((1, 2), (3, 4))</code>.
+										<br />A subquery can also be used: <code>a NOT IN (SELECT b FROM S)</code> —
+										in SQL mode this is translated to a <a href="#relalg-operations-leftsemijoin">left semi join</a>
+										combined with <a href="#relalg-operations-subtraction">set difference</a>.
+									</td>
+								</tr>
+								<tr>
 									<td>
 				<code>a + b
 				a - b
@@ -2741,7 +2764,48 @@ export class Help extends React.Component<Props> {
 								selection</a> with the very same condition. This selection is applied after joining relations of the
 								from-clause therefore has to use the original column names.</p>
 
-							<p>Subquery Expressions like <code>EXISTS</code>, <code>IN</code>, <code>ANY/SOME</code> or <code>ALL</code>
+							<p><code>IN</code> and <code>NOT IN</code> subquery expressions <strong>are supported</strong> and are
+								translated into relational algebra using <a href="#relalg-operations-leftsemijoin">left semi join</a>
+								and <a href="#relalg-operations-subtraction">set difference</a> respectively, as shown below.</p>
+
+							<div className="example">
+								<code className="sql">select distinct * from R where a in (select b from S)</code>
+								is translated to
+								<br /><code className="relalg">R ⋉ S</code>
+							</div>
+
+							<div className="example">
+								<code className="sql">select distinct * from R where a not in (select b from S)</code>
+								is translated to
+								<br /><code className="relalg">R ⋉ ( &pi; a ( R ) - &pi; b ( S ) )</code>
+							</div>
+
+							<p>When combined with other conditions via <code>AND</code>, the remaining conditions are applied as a
+								<a href="#relalg-operations-selection">selection</a> before the semi-join.
+								For <code>OR</code> combinations the <code>IN</code>/<code>NOT IN</code> is kept as a textual
+								condition inside the selection, since the semi-join translation would be semantically incorrect.</p>
+
+							<div className="example">
+								<code className="sql">select distinct * from R where a in (select b from S) and x &gt; 1</code>
+								is translated to
+								<br /><code className="relalg">&sigma; x &gt; 1 ( R ) ⋉ S</code>
+							</div>
+
+							<p>Multi-column tuples are also supported:</p>
+
+							<div className="example">
+								<code className="sql">select distinct * from R where (a, b) in (select c, d from S)</code>
+								is translated to
+								<br /><code className="relalg">R ⋉ S</code>
+							</div>
+
+							<div className="example">
+								<code className="sql">select distinct * from R where (a, b) not in (select c, d from S)</code>
+								is translated to
+								<br /><code className="relalg">R ⋉ ( &pi; a, b ( R ) - &pi; c, d ( S ) )</code>
+							</div>
+
+							<p>Subquery Expressions like <code>EXISTS</code>, <code>ANY/SOME</code> or <code>ALL</code>
 								are <strong>not supported</strong> because their translation into relational algebra is not trivial and
 								modern database systems use an extended set of operators internally that do not require a one-to-one
 								translation into "classNameical" relational algebra. Therefore the learning effect for users of this tool

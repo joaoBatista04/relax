@@ -1634,3 +1634,29 @@ QUnit.test('test selection NOT IN with subquery - all match', function (assert) 
 
 	assert.deepEqual(root.getResult(), ref.getResult());
 });
+
+
+QUnit.test('test IN subquery in OR context', function (assert) {
+	const root = exec_sql("select distinct * from R where c = 'f' or c in (select b from S)");
+
+	assert.equal(root.getResult().getRows().length, srcTableR.getResult().getRows().length, 'should return all rows from R');
+	assert.notOk(root.getFormulaHtml(false, false).includes('IN'), 'tree should not contain IN text');
+	assert.notOk(root.getFormulaHtml(false, false).includes('NOT IN'), 'tree should not contain NOT IN text');
+});
+
+
+QUnit.test('test NOT IN subquery in OR context', function (assert) {
+	const root = exec_sql("select distinct * from R where c = 'f' or c not in (select b from S)");
+
+	assert.equal(root.getResult().getRows().length, 2, 'should return only rows where c = f');
+	assert.notOk(root.getFormulaHtml(false, false).includes('IN'), 'tree should not contain IN text');
+	assert.notOk(root.getFormulaHtml(false, false).includes('NOT IN'), 'tree should not contain NOT IN text');
+});
+
+
+QUnit.test('test NOT IN complex expression uses Difference instead of AntiJoin', function (assert) {
+	const root = exec_sql("select distinct * from R where a + 1 not in (select d from S)");
+
+	assert.equal(root.getResult().getRows().length, srcTableR.getResult().getRows().length, 'should return all rows from R (no S.d value matches any a+1)');
+	assert.notOk(root.getFormulaHtml(false, false).includes('AntiJoin'), 'tree should not contain AntiJoin');
+});

@@ -1429,9 +1429,9 @@ export class ValueExprGeneric extends ValueExpr {
 				if (listArg._func === 'statementSubquery') {
 					const subqueryFormula = listArg._args[0].getFormulaHtml(false, false);
 					if (_func === 'in') {
-						return `<span>${left} IN ${subqueryFormula}</span>`;
+						return `<span>${left} = ${subqueryFormula}</span>`;
 					} else {
-						return `<span>${left} NOT IN ${subqueryFormula}</span>`;
+						return `<span>${left} ≠ ${subqueryFormula}</span>`;
 					}
 				}
 				const parts: string[] = [];

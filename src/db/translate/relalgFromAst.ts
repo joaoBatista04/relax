@@ -902,7 +902,16 @@ export function relalgFromSQLAstRoot(astRoot: sqlAst.rootSql | any, relations: {
 							rightProj = subqueryRoot;
 						} else {
 							const rightProjCols = rightRenameList.map(r => new Column(r.oldName, r.oldAlias));
-							rightProj = new Projection(subqueryRoot, rightProjCols);
+							if (subqueryRoot instanceof Projection) {
+								if (subqueryRoot.hasComputedColumns()) {
+									subqueryRoot.reorderColumns(rightRenameList.map(r => ({ name: r.oldName, alias: r.oldAlias })));
+									rightProj = subqueryRoot;
+								} else {
+									rightProj = new Projection(subqueryRoot.getChild(), rightProjCols);
+								}
+							} else {
+								rightProj = new Projection(subqueryRoot, rightProjCols);
+							}
 						}
 
 						const needsRename = rightRenameList.some(r => r.newName !== r.oldName);
@@ -918,7 +927,7 @@ export function relalgFromSQLAstRoot(astRoot: sqlAst.rootSql | any, relations: {
 
 						return new SemiJoin(root, new Difference(leftProj, rightProj), true);
 					} else {
-						return new AntiJoin(root, subqueryRoot, joinCondition);
+						return new Difference(root, new SemiJoin(root, subqueryRoot, true, joinCondition));
 					}
 				} else {
 					return new SemiJoin(root, subqueryRoot, true, joinCondition);
@@ -956,6 +965,41 @@ export function relalgFromSQLAstRoot(astRoot: sqlAst.rootSql | any, relations: {
 
 				return expr;
 			}
+			function tryExtractOrWithIn(orExpr: any): RANode | null {
+				if (!orExpr || orExpr.type !== 'valueExpr' || orExpr.datatype !== 'boolean' || orExpr.func !== 'or') {
+					return null;
+				}
+
+				const leftIn = extractInSubquery(orExpr.args[0]);
+				const rightIn = extractInSubquery(orExpr.args[1]);
+
+				if (!leftIn && !rightIn) {
+					return null;
+				}
+
+				let leftNode: RANode;
+				const leftRoot = rec(statement.from);
+				setCodeInfoFromNode(leftRoot, statement.from);
+				if (leftIn) {
+					leftNode = processInSubquery(leftRoot, leftIn);
+				} else {
+					leftNode = getSelection(leftRoot, orExpr.args[0], statement.where.codeInfo);
+				}
+				setCodeInfoFromNode(leftNode, statement.where);
+
+				let rightNode: RANode;
+				const rightRoot = rec(statement.from);
+				setCodeInfoFromNode(rightRoot, statement.from);
+				if (rightIn) {
+					rightNode = processInSubquery(rightRoot, rightIn);
+				} else {
+					rightNode = getSelection(rightRoot, orExpr.args[1], statement.where.codeInfo);
+				}
+				setCodeInfoFromNode(rightNode, statement.where);
+
+				return new Union(leftNode, rightNode);
+			}
+
 			const remainingExpr = replaceInSubqueries(whereArg);
 
 			if (extractedSubqueries.length > 0) {
@@ -976,8 +1020,14 @@ export function relalgFromSQLAstRoot(astRoot: sqlAst.rootSql | any, relations: {
 					root = processInSubquery(root, inInfo);
 					setCodeInfoFromNode(root, statement.where);
 				} else {
-					root = getSelection(root, whereArg, statement.where.codeInfo);
-					setCodeInfoFromNode(root, statement.where);
+					const orResult = tryExtractOrWithIn(whereArg);
+					if (orResult) {
+						root = orResult;
+						setCodeInfoFromNode(root, statement.where);
+					} else {
+						root = getSelection(root, whereArg, statement.where.codeInfo);
+						setCodeInfoFromNode(root, statement.where);
+					}
 				}
 			}
 		}

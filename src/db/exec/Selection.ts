@@ -22,23 +22,6 @@ export class Selection extends RANodeUnary {
 		if (condition instanceof ValueExpr.ValueExpr === false) {
 			throw new Error('no condition given');
 		}
-
-		this._subqueryNodes = Selection._collectSubqueries(this._condition);
-	}
-
-	private static _collectSubqueries(expr: ValueExpr.ValueExpr): RANode[] {
-		const result: RANode[] = [];
-		if (expr instanceof ValueExpr.ValueExprGeneric) {
-			if (expr._func === 'statementSubquery') {
-				result.push(expr._args[0] as RANode);
-			}
-			for (let i = 0; i < expr._args.length; i++) {
-				if (expr._args[i] instanceof ValueExpr.ValueExpr) {
-					result.push(...Selection._collectSubqueries(expr._args[i] as ValueExpr.ValueExpr));
-				}
-			}
-		}
-		return result;
 	}
 
 	getSchema() {

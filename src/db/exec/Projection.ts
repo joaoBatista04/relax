@@ -409,6 +409,40 @@ export class Projection extends RANodeUnary {
 		};
 	}
 
+	hasComputedColumns(): boolean {
+		if (this._columns === null) return false;
+		return this._columns.some(col => !(col instanceof Column));
+	}
+
+	reorderColumns(colOrder: { name: string, alias: string | null }[]): void {
+		if (this._columns === null) return;
+
+		const newColumns: ProjectionColumn[] = [];
+		const used = new Array(this._columns.length).fill(false);
+
+		for (const { name, alias } of colOrder) {
+			let found = false;
+			for (let i = 0; i < this._columns.length; i++) {
+				if (used[i]) continue;
+				const col = this._columns[i];
+				const colName = col instanceof Column ? col.getName() + '' : col.name;
+				const colAlias = col instanceof Column ? col.getRelAlias() : col.relAlias;
+				if (colName === name && colAlias === alias) {
+					newColumns.push(col);
+					used[i] = true;
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
+				throw new Error(`Cannot reorder: column "${name}" with alias "${alias}" not found in projection`);
+			}
+		}
+
+		this._columns = newColumns;
+		this._checked = null;
+	}
+
 	getArgumentHtml(): string {
 		const args: string[] = [];
 
